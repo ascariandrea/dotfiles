@@ -40,3 +40,6 @@ ln -sf ~/.dotfiles/vimrc ~/.vimrc
 
 ln -sF ~/.dotfiles/config/ ~/.config
 ln -sf ~/.dotfiles/gitconfig ~/.gitconfig
+
+## BitBar
+ln -sF ~/.dotfiles/bitbar/ ~/.bitbar
