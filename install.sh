@@ -25,6 +25,7 @@ ln -sf ~/.dotfiles/tmux.conf ~/.tmux.conf
 
 # vim
 ## Install Vundle
+rm -rf ~/.vim/bundle/Vundle.vim
 git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
 ## Install vim-plug
 curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
@@ -38,8 +39,10 @@ rm -rf ~/.vim/bundle/vim-colors-solarized;
 
 ln -sf ~/.dotfiles/vimrc ~/.vimrc
 
-ln -sF ~/.dotfiles/config/ ~/.config
+ln -sF ~/.dotfiles/config ~/.config
+ln -sF ~/.dotfiles/gitignore_global ~/.gitignore_global
 ln -sf ~/.dotfiles/gitconfig ~/.gitconfig
 
+
 ## BitBar
-ln -sF ~/.dotfiles/bitbar/ ~/.bitbar
+ln -sF ~/.dotfiles/bitbar ~/.bitbar

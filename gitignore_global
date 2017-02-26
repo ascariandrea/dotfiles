@@ -1,0 +1,4 @@
+.DS_Store
+*.paw
+npm-debug.log
+.zsh_config

@@ -1,5 +1,7 @@
 [core]
 	editor = vim
+	ignorecase = false
+	excludesfile = ~/.gitignore_global
 [filter "lfs"]
 	required = true
 	clean = git-lfs clean -- %f

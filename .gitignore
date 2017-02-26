@@ -1,3 +1,4 @@
 bitbar/plugins/.github.json
-config/configstore/*
+config/configstore
+config/thefuck
 config/yarn
