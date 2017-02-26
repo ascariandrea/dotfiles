@@ -21,6 +21,12 @@
 				}
 			},
 			{
+				"function": "powerline.segments.common.wthr.weather",
+				"args": {
+					"location_query": "Milan, Italy"
+				}
+			},
+			{
 				"function": "powerline.segments.common.net.hostname"
 			}
 		]
