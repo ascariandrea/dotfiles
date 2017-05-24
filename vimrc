@@ -52,3 +52,6 @@ let g:syntastic_check_on_wq = 0
 
 " eslint syntax check for javascript files
 let g:syntastic_javascript_checkers = ['eslint']
+
+" tab width
+set tabstop=2
