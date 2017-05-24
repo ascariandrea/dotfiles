@@ -1,3 +1,6 @@
+[alias]
+	feature = !hophop gh feature
+	pr = !hophop gh pr
 [core]
 	editor = vim
 	ignorecase = false
@@ -12,3 +15,5 @@
 [user]
 	name = Andrea Ascari
 	email = andrea.ascari@buildo.io
+[push]
+	default = simple
