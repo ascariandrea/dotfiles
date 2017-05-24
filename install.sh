@@ -11,13 +11,18 @@ set -x
 # -- pip (brew install pip)
 # --- python (brew install python)
 
+# ZSH install
 rm -rf ~/.oh-my-zsh
 git clone git://github.com/robbyrussell/oh-my-zsh.git ~/.oh-my-zsh
 chsh -s /bin/zsh
 
+# ZSH bullet train theme
 curl https://raw.githubusercontent.com/caiogondim/bullet-train-oh-my-zsh-theme/master/bullet-train.zsh-theme  \
   --output ~/.oh-my-zsh/themes/bullet-train.zsh-theme
   ln -sf ~/.dotfiles/zshrc ~/.zshrc
+# ZSH docker autocompletion
+mkdir -p ~/.oh-my-zsh/plugins/docker/
+curl -fLo ~/.oh-my-zsh/plugins/docker/_docker https://raw.github.com/felixr/docker-zsh-completion/master/_docker
 
 rm -rf ~/.tmux/plugins;
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
