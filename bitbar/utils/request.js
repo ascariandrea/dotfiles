@@ -23,10 +23,14 @@ module.exports = function request(organization, _options) {
     var options = buildOptions(organization, _options);
     https.request(options, function(res) {
       res
-        .on('data', function(data) { responseData = (responseData || '') + data })
-        .on('end', function() { resolve(JSON.parse(responseData)); });
+        .on('data', (data) => {
+          responseData = (responseData || '') + data;
+        })
+        .on('end', () => {
+          resolve(JSON.parse(responseData));
+        });
     })
-    .on('error', function(err) { reject(err); })
+    .on('error', reject)
     .end();
   });
 }
