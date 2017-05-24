@@ -1,11 +1,15 @@
 # Path to your oh-my-zsh installation.
 export ZSH=$HOME/.oh-my-zsh
 
+# locale
+export LC_ALL=en_US.UTF-8
+export LANG=en_US.UTF-8
+
 ZSH_THEME="bullet-train"
 
 BULLETTRAIN_DIR_EXTENDED=0
 
-plugins=(git ssh-agent)
+plugins=(docker git)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -23,6 +27,8 @@ eval "$(thefuck --alias)"
 
 # PATH
 
+# BREW
+export PATH=/usr/local/sbin:$PATH
 # GO
 export PATH=$PATH:/usr/local/opt/go/libexec/bin
 
@@ -32,6 +38,10 @@ export NVM_DIR="$HOME/.nvm"
 
 # POWERLINE
 export PATH=$PATH:/usrl/local/lib/python2.7/site-packages/powerline
+
+export ANDROID_HOME=${HOME}/Library/Android/sdk
+export PATH=${PATH}:${ANDROID_HOME}/tools
+export PATH=${PATH}:${ANDROID_HOME}/platform-tools
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
