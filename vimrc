@@ -54,4 +54,4 @@ let g:syntastic_check_on_wq = 0
 let g:syntastic_javascript_checkers = ['eslint']
 
 " tab width
-set tabstop=2
+set tabstop=2 softtabstop=0 expandtab shiftwidth=2 smarttab

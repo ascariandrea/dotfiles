@@ -2,3 +2,6 @@
 *.paw
 npm-debug.log
 .zsh_config
+
+# VSCODE
+.vscode
