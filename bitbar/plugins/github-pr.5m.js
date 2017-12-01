@@ -1,4 +1,4 @@
-#!/usr/bin/env /Users/andreaascari/.nvm/versions/node/v6.9.2/bin/node
+#!/usr/local/bin/node
 
 const request = require('../utils/request');
 const renderIndicator = require('../utils/renderIndicator');
