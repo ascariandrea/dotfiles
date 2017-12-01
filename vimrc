@@ -36,6 +36,7 @@ colorscheme solarized
 
 " line number
 set number
+set relativenumber
 
 " airline tabline
 let g:airline#extensions#tabline#enabled = 1
