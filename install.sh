@@ -26,7 +26,7 @@ curl -fLo ~/.oh-my-zsh/plugins/docker/_docker https://raw.github.com/felixr/dock
 
 rm -rf ~/.tmux/plugins;
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
-ln -sf ~/.dotfiles/tmux.conf ~/.tmux.conf
+cp -sf ~/.dotfiles/tmux.conf ~/.tmux.conf
 
 # vim
 ## Install Vundle
@@ -42,12 +42,13 @@ mkdir -p ~/.vim/colors;
 mv vim-colors-solarized/colors/solarized.vim ~/.vim/colors/;
 rm -rf ~/.vim/bundle/vim-colors-solarized;
 
-ln -sf ~/.dotfiles/vimrc ~/.vimrc
+cp -sf ~/.dotfiles/vimrc ~/.vimrc
 
-ln -sF ~/.dotfiles/config ~/.config
-ln -sF ~/.dotfiles/gitignore_global ~/.gitignore_global
-ln -sf ~/.dotfiles/gitconfig ~/.gitconfig
+cp -sF ~/.dotfiles/gitignore_global ~/.gitignore_global
+cp -sf ~/.dotfiles/gitconfig ~/.gitconfig
+
+cp -r ~/.dotfiles/config ~/.config
 
 
 ## BitBar
-ln -sF ~/.dotfiles/bitbar ~/.bitbar
+cp -r ~/.dotfiles/bitbar ~/.bitbar
