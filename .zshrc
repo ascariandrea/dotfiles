@@ -35,14 +35,14 @@ export PATH=$PATH:/usr/local/opt/go/libexec/bin
 # POWERLINE
 export PATH=$PATH:/usrl/local/lib/python2.7/site-packages/powerline
 
-export ANDROID_HOME=${HOME}/Library/Android/sdk
-export PATH=${PATH}:${ANDROID_HOME}/emulator
-export PATH=${PATH}:${ANDROID_HOME}/tools
-export PATH=${PATH}:${ANDROID_HOME}/platform-tools
+# export ANDROID_HOME=${HOME}/Library/Android/sdk
+# export PATH=${PATH}:${ANDROID_HOME}/emulator
+# export PATH=${PATH}:${ANDROID_HOME}/tools
+# export PATH=${PATH}:${ANDROID_HOME}/platform-tools
 
-# JAVA
-export JAVA_HOME="$(/usr/libexec/java_home -v 1.8)"
-export PATH=$PATH:$JAVA_HOME/bin
+# # JAVA
+# export JAVA_HOME="$(/usr/libexec/java_home -v 1.8)"
+# export PATH=$PATH:$JAVA_HOME/bin
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
