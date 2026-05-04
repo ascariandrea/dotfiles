@@ -1,4 +1,4 @@
-export ZSH="/home/andreaascari/.oh-my-zsh"
+export ZSH="$HOME/.oh-my-zsh"
 
 ZSH_THEME="agnoster"
 
@@ -43,7 +43,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 export PATH=$PATH:/usr/local/go/bin
 
 # pnpm
-export PNPM_HOME="/home/andreaascari/.local/share/pnpm"
+export PNPM_HOME="$HOME/.local/share/pnpm"
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
@@ -56,14 +56,14 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # fnm
-FNM_PATH="/home/andreaascari/.local/share/fnm"
+FNM_PATH="$HOME/.local/share/fnm"
 if [ -d "$FNM_PATH" ]; then
   export PATH="$FNM_PATH:$PATH"
   eval "$(fnm env --shell zsh)"
 fi
 
 # opencode
-export PATH=/home/andreaascari/.opencode/bin:$PATH
+export PATH="$HOME/.opencode/bin:$PATH"
 
 # direnv
 eval "$(direnv hook zsh)"
