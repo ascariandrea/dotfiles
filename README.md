@@ -1,7 +1,13 @@
 # dotfiles
 
-# Install
-Run `./install.sh` file.
+## Install
+
 ```sh
-. ./install.sh
+curl -fsSL https://raw.githubusercontent.com/ascariandrea/dotfiles/main/install.sh | zsh
+```
+
+Or, if already cloned:
+
+```sh
+./install.sh
 ```
