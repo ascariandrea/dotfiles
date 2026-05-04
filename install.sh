@@ -11,7 +11,7 @@ if [ ! -f "./.zshrc" ]; then
 fi
 
 # ── Packages ──────────────────────────────────────────────────────────────────
-sudo dnf install -y zsh tmux vim curl git direnv zsh-syntax-highlighting
+sudo dnf install -y zsh tmux tmux-powerline powerline powerline-fonts vim curl git direnv zsh-syntax-highlighting
 
 # ── Oh My Zsh ─────────────────────────────────────────────────────────────────
 rm -rf ~/.oh-my-zsh
