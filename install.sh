@@ -1,62 +1,55 @@
-#! /bin/zsh
+#! /usr/bin/env zsh
 
 set -e
 set -x
 
-set package_manager = $(brew)
+# ── Clone repo if running via curl pipe ───────────────────────────────────────
+DOTFILES_DIR="$HOME/.dotfiles"
+if [ ! -f "./.zshrc" ]; then
+  git clone https://github.com/ascariandrea/dotfiles "$DOTFILES_DIR"
+  cd "$DOTFILES_DIR"
+fi
 
-## Requirements
+# ── Packages ──────────────────────────────────────────────────────────────────
+sudo dnf install -y zsh tmux vim curl git direnv zsh-syntax-highlighting
 
-# zsh
-$package_manager zsh
-# on-my-zsh
+# ── Oh My Zsh ─────────────────────────────────────────────────────────────────
 rm -rf ~/.oh-my-zsh
-git clone git://github.com/robbyrussell/oh-my-zsh.git ~/.oh-my-zsh
-# zsh - bullet train theme
-curl https://raw.githubusercontent.com/caiogondim/bullet-train-oh-my-zsh-theme/master/bullet-train.zsh-theme  \
-  --output ~/.oh-my-zsh/themes/bullet-train.zsh-theme
-# copy .zshrc
+git clone https://github.com/ohmyzsh/ohmyzsh.git ~/.oh-my-zsh
+
 cp .zshrc ~/.zshrc
-# zsh - docker autocompletion
-mkdir -p ~/.oh-my-zsh/plugins/docker/
-curl -fLo ~/.oh-my-zsh/plugins/docker/_docker https://raw.github.com/felixr/docker-zsh-completion/master/_docker
-# thefuck
-$package_manager thefuck
-# tmux
-$package_manager tmux
-# - python
-$package_manager install python@2
-# - pip 
-$package_manager install pip
-# - powerline
-pip install powerline-status
-# - powerline fonts
-git clone https://github.com/powerline/fonts.git --depth=1
 
-# tmux plugins
-rm -rf ~/.tmux/plugins;
+# ── tmux ──────────────────────────────────────────────────────────────────────
+rm -rf ~/.tmux/plugins
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
-# copy tmux.conf
-cp ./tmux.conf ~/.tmux.conf
+cp tmux.conf ~/.tmux.conf
 
-# vim
-## Vundle
-rm -rf ~/.vim/bundle/Vundle.vim
-git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
-## Install vim-plug
-curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
-# Vim colors solarized
-rm -rf ~/.vim/bundle/vim-colors-solarized
-git clone git://github.com/altercation/vim-colors-solarized.git ~/.vim/colors/
-# copy .vmrc
-cp ./.vimrc ~/.vimrc
-# copy .gitignore_global 
+# ── vim ───────────────────────────────────────────────────────────────────────
+curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
+  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+cp .vimrc ~/.vimrc
+
+# ── git ───────────────────────────────────────────────────────────────────────
 cp .gitignore_global ~/.gitignore_global
-# copy .gitconfig
 cp .gitconfig ~/.gitconfig
-# copy .config
-cp -r .config ~/.config
 
+# delta (better git diff)
+sudo dnf install -y git-delta
 
-## BitBar
-cp -r ./bitbar ~/.bitbar
+# ── config/ ───────────────────────────────────────────────────────────────────
+mkdir -p ~/.config
+cp -r config/k9s ~/.config/k9s
+
+# ── Node (fnm) ────────────────────────────────────────────────────────────────
+curl -fsSL https://fnm.vercel.app/install | bash
+
+# ── pnpm ──────────────────────────────────────────────────────────────────────
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+# ── bun ───────────────────────────────────────────────────────────────────────
+curl -fsSL https://bun.sh/install | bash
+
+# ── Change default shell ───────────────────────────────────────────────────────
+chsh -s $(which zsh)
+
+echo "Done. Open a new terminal or run: exec zsh"

@@ -1,5 +1,17 @@
 .DS_Store
 npm-debug.log
 
-# VSCODE
+# VSCode
 .vscode
+
+# JetBrains
+.idea/
+*.iml
+
+# Editors
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db

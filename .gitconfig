@@ -1,6 +1,12 @@
-[alias]
-	feature = !hophop gh feature
-	pr = !hophop gh pr
+[author]
+	email = dev.ascariandrea@gmail.com
+	name = ascariandrea
+[committer]
+	email = dev.ascariandrea@gmail.com
+	name = ascariandrea
+[user]
+	email = dev.ascariandrea@gmail.com
+	name = ascariandrea
 [core]
 	editor = vim
 	ignorecase = false
@@ -11,9 +17,24 @@
 	smudge = git-lfs smudge -- %f
 	process = git-lfs filter-process
 [merge]
-	tool = opendiff
-[user]
-	name = Andrea Ascari
-	email = andrea.ascari@buildo.io
+	tool = vscode
+	ff = only
+[mergetool "vscode"]
+	cmd = code --wait $MERGED
+[diff]
+	tool = vscode
+[difftool "vscode"]
+	cmd = code --wait --diff $LOCAL $REMOTE
 [push]
 	default = simple
+[pager]
+	diff = delta
+	log = delta
+	reflog = delta
+	show = delta
+[interactive]
+	diffFilter = delta --color-only --features=interactive
+[delta]
+	side-by-side = true
+[init]
+	defaultBranch = main
