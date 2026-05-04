@@ -50,6 +50,6 @@ curl -fsSL https://get.pnpm.io/install.sh | sh -
 curl -fsSL https://bun.sh/install | bash
 
 # ── Change default shell ───────────────────────────────────────────────────────
-chsh -s $(which zsh)
+sudo usermod -s $(which zsh) $USER
 
 echo "Done. Open a new terminal or run: exec zsh"
