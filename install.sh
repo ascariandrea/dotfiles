@@ -6,7 +6,7 @@ set -x
 # ── Clone repo if running via curl pipe ───────────────────────────────────────
 DOTFILES_DIR="$HOME/.dotfiles"
 if [ ! -f "./.zshrc" ]; then
-  git clone https://github.com/ascariandrea/dotfiles "$DOTFILES_DIR"
+  git clone https://github.com/ascariandrea/dotfiles -b master "$DOTFILES_DIR"
   cd "$DOTFILES_DIR"
 fi
 
