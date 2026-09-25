@@ -2,3 +2,6 @@ bitbar/plugins/.github.json
 config/configstore
 config/thefuck
 config/yarn
+
+# Local secrets — see env.example
+.env

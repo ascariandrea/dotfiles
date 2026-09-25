@@ -40,6 +40,27 @@ sudo dnf install -y git-delta
 mkdir -p ~/.config
 cp -r config/k9s ~/.config/k9s
 
+# ── Agent skills (opencode + Claude Code) ─────────────────────────────────────
+# Symlinked, not copied, so edits land in this repo. opencode dir is canonical;
+# ~/.claude/skills points at it. A pre-existing real dir is moved to a backup
+# outside the skills dirs (a backup left inside would load as a duplicate skill).
+mkdir -p ~/.config/opencode/skills ~/.claude/skills
+SKILLS_BACKUP=~/.local/state/dotfiles-backup/skills-$(date +%Y%m%d%H%M%S)
+for s in "$PWD"/agents/skills/*/; do
+  n=$(basename "$s")
+  for pair in opencode:"$HOME/.config/opencode/skills/$n" claude:"$HOME/.claude/skills/$n"; do
+    tool=${pair%%:*} dst=${pair#*:}
+    if [ -e "$dst" ] && [ ! -L "$dst" ]; then
+      mkdir -p "$SKILLS_BACKUP/$tool" && mv "$dst" "$SKILLS_BACKUP/$tool/"
+    fi
+  done
+  ln -sfn "${s%/}" ~/.config/opencode/skills/"$n"
+  ln -sfn ../../.config/opencode/skills/"$n" ~/.claude/skills/"$n"
+done
+
+# Per-machine values + secrets for the skills (never committed)
+if [ ! -f ~/.env ]; then cp env.example ~/.env; chmod 600 ~/.env; echo "Fill in ~/.env"; fi
+
 # ── Node (fnm) ────────────────────────────────────────────────────────────────
 curl -fsSL https://fnm.vercel.app/install | bash
 
