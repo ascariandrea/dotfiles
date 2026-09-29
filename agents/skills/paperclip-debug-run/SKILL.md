@@ -43,14 +43,17 @@ that ships, run it here.)
 
 ## Hard limits — read before starting
 
-- **No run API.** `services/zeroclaw/skills/coding/paperclip/references/api-reference.md`
-  is explicit: there is no `GET /api/runs/:runId`. Anchor everything on the
-  **issue**. The run transcript exists only in the Paperclip UI
-  (`/<prefix>/agents/<key>/runs/<run-id>`), not over the API.
-- **Pod logs are ephemeral.** `kubectl logs` only covers the current pod since
-  its last restart, rotated. If the run is more than a few hours old or the pod
-  restarted since, the adapter/agent-side detail is gone — say so in the report,
-  do not infer tool-call detail you cannot see.
+- **Run records are durable; pod logs are not.** The board token *can* read a
+  run: `GET /api/heartbeat-runs/<runId>` (status, error, `stderrExcerpt`,
+  `contextSnapshot.issueId`, `logRef`), and the full run NDJSON sits on the
+  paperclip PVC (Step 1a). Per-tool-call detail (arguments, `input_tokens` per
+  iteration) lives in the zeroclaw runtime trace on its PVC (Step 3). `kubectl
+  logs`, by contrast, only covers the current pod since its last restart. If
+  neither the NDJSON nor the trace covers the run, say so in the report — do
+  not infer tool-call detail you cannot see.
+- **The failure summary can lie.** `Error: The selected model provider returned
+  a server error` is also what zeroclaw prints after `Context overflow
+  unrecoverable`. Always read the run NDJSON before classifying.
 - **`config.toml` is CLI-only.** Never hand-edit it, never `kubectl cp` it, even
   to match the git snapshot — see `[[feedback-zeroclaw-config-toml-readonly]]`.
   Changes go through `zeroclaw config patch` only.
@@ -62,14 +65,16 @@ that ships, run it here.)
 
 ## Step 0 — Inputs
 
-You need the **Paperclip issue identifier** (e.g. `PAP-123`) or its issue id.
-Optional: a `PAPERCLIP_RUN_ID` (`run-…`) from the UI to narrow the log grep, and
-an approximate time of the run for `--since`.
+You need either the **Paperclip issue identifier** (e.g. `PAP-123`) / issue id,
+or a **run URL** from the UI (`/<prefix>/agents/<key>/runs/<run-uuid>`) — the
+trailing UUID is the run id, and Step 1a resolves the issue from it.
 
 ```bash
 set -a; . ~/.env; set +a          # PAPERCLIP_BOARD_TOKEN, PAPERCLIP_COMPANY_ID
-KX="kubectl --context "$PAPERCLIP_KUBE_CONTEXT" -n "$PAPERCLIP_NAMESPACE""
-PC() { $KX exec -i deploy/paperclip -- curl -s \
+# Functions, not a "$KX" string: zsh does not word-split unquoted variables, so
+# `KX="kubectl …"; $KX logs …` fails silently there (no output, no error).
+kx() { kubectl --context "$PAPERCLIP_KUBE_CONTEXT" -n "$PAPERCLIP_NAMESPACE" "$@"; }
+PC() { kx exec -i deploy/paperclip -c paperclip -- curl -s \
   -H "Authorization: Bearer $PAPERCLIP_BOARD_TOKEN" \
   "http://localhost:3100$1"; }
 ```
@@ -77,6 +82,34 @@ PC() { $KX exec -i deploy/paperclip -- curl -s \
 `PC` runs the API call from inside the paperclip pod (localhost, no Cloudflare
 Access gate). The board token is company-scoped read; if an endpoint 403s it,
 fall back to what the issue thread already shows.
+
+Shell functions don't survive between separate tool calls — put the block above
+in a scratch file (e.g. `pc.sh`) and `source` it at the top of each command.
+
+## Step 1a — The run itself (when you have a run id)
+
+```bash
+RUN=<run-uuid>
+PC "/api/heartbeat-runs/$RUN" | jq '{status, error, errorCode, startedAt, finishedAt,
+  agentId, issue: .contextSnapshot.issueId, source: .contextSnapshot.source,
+  retryOf: .contextSnapshot.retryOfRunId, logRef}'
+PC "/api/heartbeat-runs/$RUN" | jq -r '.stderrExcerpt'      # truncated tail
+
+# Full run log (NDJSON, one {ts,stream,chunk} per line) on the paperclip PVC:
+kx exec deploy/paperclip -c paperclip -- \
+  cat "/paperclip/instances/default/data/run-logs/<logRef>" \
+  | jq -r '[.ts, .stream, .chunk] | @tsv'
+
+# Sibling runs for the same agent — is this a one-off or a streak?
+PC "/api/companies/$PAPERCLIP_COMPANY_ID/heartbeat-runs?agentId=<agentId>&limit=15" \
+  | jq -r '.[] | [.id[0:8], .startedAt, .status, (.contextSnapshot.issueId // "-" | .[0:8]),
+      ((.error // "") | .[0:100])] | @tsv'
+```
+
+`stderrExcerpt` is often null on older runs; the NDJSON is the reliable source.
+Grep it for `Context overflow`, `Request exceeds model context`, `Custom API
+error (5xx)`, `timed out`, `tool failed: <tool>`, `"iteration":N`. Then carry
+`.contextSnapshot.issueId` into Step 1.
 
 ## Step 1 — Paperclip-side signal
 
@@ -128,9 +161,9 @@ Both containers of the zeroclaw pod. Widen `--since` to comfortably cover the
 run; add `--previous` if the pod restarted since.
 
 ```bash
-$KX logs -l app=zeroclaw-zeroclaw -c http-adapter --since=3h --timestamps \
+kx logs -l app=zeroclaw-zeroclaw -c http-adapter --since=3h --timestamps \
   | grep -E 'run-[0-9a-f]|'"$ISSUE"'|\[Paperclip\]|\[Zeroclaw\]|Adapter run'
-$KX logs -l app=zeroclaw-zeroclaw -c zeroclaw     --since=3h --timestamps \
+kx logs -l app=zeroclaw-zeroclaw -c zeroclaw     --since=3h --timestamps \
   | grep -E "$ISSUE|error|panic|WARN|tool call|context"
 ```
 
@@ -139,21 +172,47 @@ Look for: `[Paperclip] Zeroclaw agent "<x>" (from model|default)`, the deadline
 malformed tool-call parse errors, LocalAI `503` / `queue_timeout`, context-token
 overflow, provider retries.
 
-CLI session state (keyed by issue + agent) — optional, only if the logs are thin:
+**Runtime trace — the tool-call ground truth.** zeroclaw writes every
+`llm_request` / `llm_response` (with `input_tokens` per iteration) and every
+`tool_call_start` (with full `arguments`) to its PVC; it survives pod restarts.
+Slice it by the run's time window:
 
 ```bash
-$KX exec deploy/zeroclaw-zeroclaw -c zeroclaw -- \
+kx exec deploy/zeroclaw-zeroclaw -c zeroclaw -- sh -c \
+  'cat /zeroclaw-data/workspace/.zeroclaw/data/state/runtime-trace*' \
+  | grep '"<YYYY-MM-DDTHH:M>' \
+  | jq -r 'select(.zeroclaw.runtime_profile=="<agent>")
+      | select(.message|test("llm_response|tool_call_start|overflow|exceed|failed"))
+      | [."@timestamp"[11:23], .message, (.attributes.iteration // "" | tostring),
+         (.attributes.tool // ""), ((.attributes.arguments // "") | .[0:160]),
+         (.attributes.input_tokens // "" | tostring)] | @tsv'
+```
+
+A jump in `input_tokens` right after a tool call names the call that blew the
+context. Concurrent runs of the same agent interleave here — tell them apart by
+`trace_id` or the arguments. Redact bearer tokens before quoting.
+
+CLI session state (keyed by issue + agent) — optional, only if the trace is thin:
+
+```bash
+kx exec deploy/zeroclaw-zeroclaw -c zeroclaw -- \
   find /zeroclaw-data/workspace/.zeroclaw -maxdepth 6 -name "*$ISSUE*" 2>/dev/null
 ```
 
-Config sanity when the failure looks config-shaped:
+Config sanity when the failure looks config-shaped (the live file is
+`/zeroclaw-data/workspace/.zeroclaw/config.toml`; `/zeroclaw-data/.zeroclaw/config.toml`
+is an unused stub):
 
 ```bash
-$KX exec deploy/zeroclaw-zeroclaw -c zeroclaw -- zeroclaw config show   # or: cat the config, read-only
+kx exec deploy/zeroclaw-zeroclaw -c zeroclaw -- zeroclaw config get <dotted.path>
+kx exec deploy/zeroclaw-zeroclaw -c zeroclaw -- zeroclaw skills list --agent <agent>   # what it actually loads
+kx exec deploy/zeroclaw-zeroclaw -c zeroclaw -- zeroclaw config schema                # knob names + defaults
 ```
 
 Confirm the alias from Step 1/2 has a real `[agents.<id>]` block, and check the
-knob the symptom points at (see the table below).
+knob the symptom points at (see the table below). If the run was supposed to
+follow a skill, confirm that skill appears in `skills list --agent` — a skill
+that lives in a bundle the agent doesn't load is invisible to it.
 
 ## Step 4 — Cross-reference known failure modes
 
@@ -177,6 +236,8 @@ Before writing a fix, check whether this is already a known pattern:
 | Run died at ~5 min, `undici` / `headersTimeout` | infra (adapter fetch) | **D** — `[[paperclip-zeroclaw-5min-undici-headerstimeout]]` |
 | `503 queue_timeout` bursts, recovery-run storm | infra (gateway `max_queue_wait_ms`) | **D** — `[[localai-gateway-queue-timeout-stampede]]` |
 | opencode empty reply / OOM after a 2nd model loaded | infra (gateway eviction) | **D** — `[[localai-gateway-capacity-reconcile-oom]]` |
+| Summary says `provider returned a server error`, but the NDJSON has `Context overflow unrecoverable` | one tool result (registry listing, big API/`web_fetch` body) filled the window — often several in one parallel batch | trace: find the call before the `input_tokens` jump. Prompt/skill fix (**A**/**B**) to stop the call; `[http_request].max_response_size` / `[web_fetch].max_response_size` (**C**, global) as the safety net |
+| Agent improvised instead of following the skill the task names | skill lives in a bundle the agent doesn't load (`agents.<id>.skill_bundles`) — check `zeroclaw skills list --agent <id>` | **C** — add the bundle to the agent (playbook `pb_20260929_161543_7555`, HOM-632) |
 | `zeroclaw agent -a <alias>` hard error | bad `adapterConfig.model`, or bad `ZEROCLAW_DEFAULT_AGENT` | check the Paperclip agent's model / helm `defaultAgent` vs `config.toml` |
 
 **Pick the narrowest target.** Many Paperclip agents map to one zeroclaw agent
@@ -237,7 +298,7 @@ the next `agents-to-pod.sh` run keeps it.
 ### C — config.toml (CLI only, user-approved)
 
 ```bash
-$KX exec deploy/zeroclaw-zeroclaw -c zeroclaw -- zeroclaw config patch '<patch expr>'
+kx exec deploy/zeroclaw-zeroclaw -c zeroclaw -- zeroclaw config patch '<patch expr>'
 ```
 
 - Never hand-edit `config.toml` or `kubectl cp` it — CLI patch is the only path
@@ -298,8 +359,9 @@ bearer tokens redacted>
   excerpt you quote.
 - **Read-only.** No fix is applied and nothing is posted to the Paperclip issue
   until the user approves the proposed change.
-- **Ephemeral logs.** No log hits in the `--since` window + a restarted pod =
-  "pod-side logs rotated". Do not fabricate tool-call detail.
+- **Ephemeral logs.** Container logs rotate; the run NDJSON and the runtime
+  trace don't. If none of the three covers the run, say so. Do not fabricate
+  tool-call detail.
 - **`config.toml` is CLI-only.** No hand edits, no `kubectl cp`, ever.
 - **One PR per change**, off `origin/main`, never pushed to main.
 - **One run at a time.**
