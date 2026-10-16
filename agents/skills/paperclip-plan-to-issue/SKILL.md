@@ -3,19 +3,29 @@ name: paperclip-plan-to-issue
 description: >
   Turn a plan-doc markdown file (docs/plans/*.md) into a proper Paperclip parent
   issue: full plan posted as the issue `plan` document, one sub-issue per
-  workstream with parent/child + blocker edges, everything parked in `backlog`.
+  workstream with parent/child + blocker edges. By default the parent goes to
+  `todo` assigned to an owner agent, whose direct reports get the sub-issues;
+  `--backlog` parks the whole tree instead.
   Runs from any checkout (home-lab, lies-exposed, …) as the operator, using the board token — not a
   zeroclaw-pod skill. Trigger phrases: "turn this plan into a paperclip issue",
-  "convert docs/plans/X.md to a paperclip parent + sub-issues", "file this plan
-  on the board in backlog".
+  "convert docs/plans/X.md to a paperclip parent + sub-issues", "hand this plan
+  to <agent>", "file this plan on the board in backlog" (→ `--backlog`).
 ---
 
 # paperclip-plan-to-issue
 
 Convert a repo plan document into a Paperclip **parent issue + sub-issues**,
 with the whole plan text stored as the parent's `plan` document so agents that
-later pick the work up read it in full. The tree lands in **`backlog`** — this
-skill files work, it does not schedule it.
+later pick the work up read it in full.
+
+**Default mode:** the parent lands in **`todo`, assigned to an owner agent**,
+and the sub-issues land in **`todo`, unassigned**, with blocker edges. The owner
+reads the plan and assigns each sub-issue to one of its direct reports (agents
+whose `reportsTo` is the owner) on its next run or supervision wake.
+
+**`--backlog`** (opt-in, the old behaviour): the whole tree is parked in
+`backlog` with role-matched assignees, and nothing runs until someone promotes
+it.
 
 Runs from **any checkout** (home-lab, lies-exposed, …) — the skill lives in user
 space. Paperclip creds and endpoints come from `~/.env` (template: dotfiles
@@ -29,11 +39,20 @@ credential.
 ## When to use / not use
 
 - **Use** when you have a finished plan in `docs/plans/<name>.md` (or equivalent)
-  and want it tracked on the board as a parent with a decomposed sub-issue list.
+  and want it on the board as a parent with a decomposed sub-issue list, either
+  handed to an owner (default) or parked (`--backlog`).
 - **Don't use** to convert a plan that is *already* a Paperclip issue document
   into executable tasks from inside a heartbeat run — that is the zeroclaw-pod
   skill `services/zeroclaw/skills/coding/paperclip-converting-plans-to-tasks`.
   This skill is the operator-side, cold-start, "get it onto the board" path.
+
+## Arguments
+
+- `--owner <agent name>`: the agent that owns the plan (default mode). If not
+  given, use `PAPERCLIP_PLAN_OWNER_AGENT` from `~/.env`. If that is not set
+  either, use the root agent (`reportsTo: null`).
+- `--backlog`: park everything in `backlog` and assign sub-issues by role.
+  `--owner` is ignored.
 
 ## Prerequisites
 
@@ -41,6 +60,8 @@ credential.
   lives there).
 - `PAPERCLIP_BOARD_TOKEN` + `PAPERCLIP_COMPANY_ID` in `~/.env` (template: dotfiles `env.example`). If the
   token is expired (`401`), refresh it with the `paperclip-board-token` skill.
+- Optional `PAPERCLIP_PLAN_OWNER_AGENT` in `~/.env`: the default owner agent
+  name.
 - The plan file on disk in the current checkout.
 
 Paperclip is behind Cloudflare Access, so calls go **from inside the paperclip
@@ -49,7 +70,7 @@ pod** over localhost (no Access gate):
 ```bash
 set -a; . ~/.env; set +a          # PAPERCLIP_* vars
 export CID="$PAPERCLIP_COMPANY_ID"
-PC() {  # PC <METHOD> <path>  — body on stdin for POST/PUT
+PC() {  # PC <METHOD> <path>  — body on stdin for POST/PUT/PATCH
   kubectl --context "$PAPERCLIP_KUBE_CONTEXT" -n "$PAPERCLIP_NAMESPACE" exec -i deploy/paperclip -- \
     curl -s -X "$1" -H "Authorization: Bearer $PAPERCLIP_BOARD_TOKEN" \
     -H "Content-Type: application/json" --data-binary @- "http://localhost:3100$2"
@@ -64,9 +85,18 @@ comment, document, or commit.
 
 ## Guardrails
 
-- **`backlog` only.** Every issue this skill creates — parent and children — is
-  created with `"status": "backlog"`. Do not set `todo`/`in_progress`; the point
-  is to park, not schedule. Assigning an agent is fine (backlog does not wake).
+- **Status by mode.** Default: parent `todo`, assigned to the owner; children
+  `todo` and **unassigned**. The owner delegates, so do not pick assignees for
+  the children yourself. `--backlog`: parent and children all `backlog`,
+  children assigned by role (backlog does not wake). Never create anything
+  `in_progress`.
+- **One owner, resolved once.** Stop and ask the user if the owner name matches
+  no agent or more than one, or if there is no single root agent. Warn if the
+  owner has no direct reports: it would have to do every sub-issue itself.
+- **The owner wakes last.** Assigning a `todo` issue to an agent wakes it. In
+  default mode, create the parent in `backlog` with the owner already assigned,
+  attach the plan and the children, and flip the parent to `todo` as the final
+  write. The owner then wakes to a complete tree.
 - **Plan goes in the `plan` document, not the description.** The description is a
   short abstract + the sub-issue list. The verbatim plan body is `PUT` to
   `/api/issues/{id}/documents/plan`.
@@ -92,27 +122,54 @@ comment, document, or commit.
 Read the whole plan file. Identify:
 
 - **Parent title** — the plan's goal in a few words.
-- **Abstract** — 2–4 sentences: what and why, the key constraint, that it is
-  parked in backlog.
+- **Abstract** — 2–4 sentences: what and why, and the key constraint.
 - **Workstreams** — the ordered list of sub-issues. A deploy-order / rollout
   section near the end of the plan is usually the best decomposition source.
 - **Dependency edges** — which workstream blocks which (e.g. "apply live config"
   is blocked by "ship the chart change").
-- **Assignees** — map each workstream to a Paperclip agent by role
+- **Assignees** — default mode: only the parent, to the owner (Step 2).
+  `--backlog` only: map each workstream to a Paperclip agent by role
   (`GET /api/companies/{CID}/agents` → match `name`/`title`; infra/helm →
   `DevOpsAgent`, live cluster mutation → `SysAdmin`, verification → `QAEngineer`,
   etc.). Leave `assigneeAgentId` off only if no agent fits.
 
-### Step 2 — Resolve project + goal
+### Step 2 — Resolve the owner (default mode only)
+
+`OWNER` is the `--owner` value the user gave, if any.
 
 ```bash
-PC GET "/api/companies/$CID/projects" # pick the project this plan belongs to
-PC GET "/api/companies/$CID/goals"    # pick the goal (often one company goal)
+PC GET "/api/companies/$CID/agents" < /dev/null > /tmp/agents.json
+python3 - "${OWNER:-${PAPERCLIP_PLAN_OWNER_AGENT:-}}" <<'PY'
+import json, sys
+want = sys.argv[1]
+data = json.load(open("/tmp/agents.json"))
+agents = [a for a in (data if isinstance(data, list) else data.get("agents", []))
+          if a.get("status") not in ("paused", "terminated")]
+pick = ([a for a in agents if a["name"].lower() == want.lower()] if want
+        else [a for a in agents if not a.get("reportsTo")])
+if len(pick) != 1:
+    sys.exit(f"owner not resolved: {len(pick)} match(es) for {want or 'root agent'}")
+owner = pick[0]
+reports = [a["name"] for a in agents if a.get("reportsTo") == owner["id"]]
+print(owner["id"], owner["name"], "| reports:", ", ".join(reports) or "NONE")
+PY
+```
+
+Record the owner id and name.
+
+### Step 3 — Resolve project + goal
+
+```bash
+PC GET "/api/companies/$CID/projects" < /dev/null # pick the project this plan belongs to
+PC GET "/api/companies/$CID/goals" < /dev/null    # pick the goal (often one company goal)
 ```
 
 Record `projectId` and `goalId` — set both on the parent and every sub-issue.
 
-### Step 3 — Create the parent issue (backlog)
+### Step 4 — Create the parent issue
+
+Always created in `backlog` first. In default mode the owner is assigned now
+and the status flips to `todo` in Step 7.
 
 ```bash
 PC POST "/api/companies/$CID/issues" <<JSON
@@ -120,16 +177,20 @@ PC POST "/api/companies/$CID/issues" <<JSON
   "title": "<parent title>",
   "status": "backlog",
   "priority": "medium",
+  "assigneeAgentId": "<owner-id>",
   "projectId": "<projectId>",
   "goalId": "<goalId>",
-  "description": "<abstract>\n\nFull plan is in the **plan** document on this issue (mirrors \`docs/plans/<name>.md\`). Parked in backlog.\n\nSub-issues:\n1. <title>\n2. <title>\n..."
+  "description": "<abstract>\n\nFull plan is in the **plan** document on this issue (mirrors \`docs/plans/<name>.md\`).\n\nOwner: assign each sub-issue below to one of your direct reports and supervise it to done.\n\nSub-issues:\n1. <title>\n2. <title>\n..."
 }
 JSON
 ```
 
+`--backlog`: omit `assigneeAgentId` and replace the "Owner:" line with
+"Parked in backlog."
+
 Capture `.id` (uuid) and `.identifier` (`HOM-NN`) from the response.
 
-### Step 4 — Post the plan as the `plan` document
+### Step 5 — Post the plan as the `plan` document
 
 Build the payload from the file so markdown/newlines round-trip cleanly — do not
 hand-escape:
@@ -147,7 +208,7 @@ Response returns `latestRevisionNumber: 1`. If a `plan` doc already exists,
 `GET /api/issues/<id>/documents/plan` first and pass its `latestRevisionId` as
 `baseRevisionId`.
 
-### Step 5 — Create the sub-issues (backlog, parented, blocked)
+### Step 6 — Create the sub-issues (parented, blocked)
 
 For each workstream, in dependency order so blocker ids exist when referenced:
 
@@ -155,33 +216,57 @@ For each workstream, in dependency order so blocker ids exist when referenced:
 PC POST "/api/companies/$CID/issues" <<JSON
 {
   "title": "<workstream title>",
-  "status": "backlog",
+  "status": "todo",
   "priority": "medium",
   "parentId": "<parent-id>",
   "projectId": "<projectId>",
   "goalId": "<goalId>",
-  "assigneeAgentId": "<agent-id or omit>",
   "blockedByIssueIds": ["<blocker-sub-id>", "..."],
   "description": "<what this delivers>\n\n**Scope**\n- ...\n\n**Acceptance**\n- ...\n\nSee the plan document on the parent (HOM-NN) §<n>."
 }
 JSON
 ```
 
+Default mode: no `assigneeAgentId`; the owner assigns. An unassigned `todo`
+issue wakes nobody, and once the owner assigns it, its blockers still hold it
+until they reach `done`.
+
+`--backlog`: `"status": "backlog"` and `"assigneeAgentId": "<agent-id or omit>"`.
+
 `blockedByIssueIds` **replaces** the set on each write; omit it for
 no-dependency issues. Circular / self edges are rejected.
 
-### Step 6 — Verify
+### Step 7 — Hand the parent to the owner (default mode only)
+
+The last write. It wakes the owner:
 
 ```bash
-PC GET "/api/companies/$CID/issues?parentId=<parent-id>"   # all children, all backlog
-PC GET "/api/issues/<each-blocked-sub-id>"                  # blockedBy shows the right identifiers
-PC GET "/api/issues/<parent-id>/documents/plan"            # body length ~= plan file size
+echo '{"status": "todo"}' | PC PATCH "/api/issues/<parent-id>"
 ```
 
-### Step 7 — Report
+### Step 8 — Verify
 
-Give the user the parent identifier and the sub-issue list with their blocker
-edges and assignees, e.g.:
+```bash
+PC GET "/api/issues/<parent-id>" < /dev/null                # todo + owner (backlog with --backlog)
+PC GET "/api/companies/$CID/issues?parentId=<parent-id>" < /dev/null   # children: todo + unassigned (backlog + assignees with --backlog)
+PC GET "/api/issues/<each-blocked-sub-id>" < /dev/null      # blockedBy shows the right identifiers
+PC GET "/api/issues/<parent-id>/documents/plan" < /dev/null # body length ~= plan file size
+```
+
+### Step 9 — Report
+
+Give the user the parent identifier, its status and owner, and the sub-issue
+list with blocker edges (plus assignees in `--backlog` mode), e.g.:
+
+```
+HOM-53  CodeGraph for zeroclaw coding agents   (todo → CTO, plan doc rev 1)
+├─ HOM-54  Helm: install-codegraph initContainer …        unassigned
+├─ HOM-55  Agent bundles: index-bootstrap instructions …  unassigned
+├─ HOM-56  config.toml: register codegraph MCP server …   unassigned ← blocked by HOM-54, HOM-55
+└─ HOM-57  Smoke test + context update …                  unassigned ← blocked by HOM-56
+```
+
+`--backlog`:
 
 ```
 HOM-53  CodeGraph for zeroclaw coding agents   (backlog, plan doc rev 1)
@@ -195,8 +280,7 @@ HOM-53  CodeGraph for zeroclaw coding agents   (backlog, plan doc rev 1)
 
 - The board token is company-scoped. A `403` on an endpoint means the token
   lacks that scope — fall back or refresh via `paperclip-board-token`.
-- Issue creation with `"status": "backlog"` is accepted directly; no create-then-
-  PATCH dance is needed.
+- Issue creation with `"status": "backlog"` or `"todo"` is accepted directly.
 - The `GET /api/issues/{id}` response does not embed `children` or `documents` —
   list children with `?parentId=`, fetch the plan via the documents endpoint.
 - Keep the repo plan doc as the working copy; the Paperclip `plan` document is a
